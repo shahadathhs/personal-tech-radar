@@ -1,0 +1,64 @@
+name: radar
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-radar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-radar}
+      POSTGRES_DB: ${POSTGRES_DB:-radar}
+    ports:
+      - "${POSTGRES_PORT:-5544}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-radar} -d ${POSTGRES_DB:-radar}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-16379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Inside the compose network the DB/redis hosts are the service names.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-radar}:${POSTGRES_PASSWORD:-radar}@postgres:5432/${POSTGRES_DB:-radar}
+      REDIS_URL: redis://redis:6379/0
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 7101"
+    ports:
+      - "${BACKEND_PORT:-7101}:7101"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:${BACKEND_PORT:-7101}
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3200}:3200"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
