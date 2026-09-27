@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     ai_provider: str = "zai"  # zai | openai | ollama
     ai_base_url: str = "https://api.z.ai/api/paas/v4"
     ai_api_key: str = ""
-    ai_model: str = "glm-4.6"
-    ai_fast_model: str = "glm-4.5-air"
+    ai_model: str = "glm-5.3"
+    ai_fast_model: str = "glm-5.3-flash"
 
     # Telegram delivery.
     telegram_bot_token: str = ""

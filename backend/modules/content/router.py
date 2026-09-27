@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from core.database import get_db
 from models import AIAnalysis, ContentItem
@@ -16,8 +17,10 @@ async def list_content(
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
 ) -> ContentListOut:
-    base = select(ContentItem, AIAnalysis).outerjoin(
-        AIAnalysis, AIAnalysis.content_item_id == ContentItem.id
+    base = (
+        select(ContentItem, AIAnalysis)
+        .outerjoin(AIAnalysis, AIAnalysis.content_item_id == ContentItem.id)
+        .options(joinedload(ContentItem.source))
     )
     count_query = select(func.count()).select_from(ContentItem)
     if status:

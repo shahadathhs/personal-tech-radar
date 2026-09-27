@@ -1,5 +1,6 @@
 """Analyze pending content items with the configured AI provider."""
 
+import asyncio
 import logging
 import uuid
 
@@ -63,6 +64,8 @@ async def analyze_pending(db: AsyncSession, user_id: uuid.UUID, limit: int = 100
         except Exception:
             logger.exception("AI analysis failed for item %s — skipping", item.id)
             continue
+        # Stay polite with provider rate limits.
+        await asyncio.sleep(1.0)
 
         if analysis.is_duplicate:
             item.status = ContentStatus.rejected.value

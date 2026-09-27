@@ -4,8 +4,9 @@ import logging
 import uuid
 from datetime import UTC, date, datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from core.config import settings
 from models import AIAnalysis, ContentItem, ContentStatus, Digest, DigestItem, DigestStatus
@@ -25,6 +26,18 @@ def estimate_reading_time(texts: list[str]) -> int:
 async def generate_digest(db: AsyncSession, user_id: uuid.UUID, digest_date: date) -> Digest:
     """Build (or rebuild) the digest for one user/day. Idempotent."""
     # Remove any earlier version for this user/date so reruns are safe.
+    # Bulk deletes don't fire ORM cascades and the FK isn't ON DELETE CASCADE,
+    # so clear digest_items first and release their content items for re-ranking.
+    existing_ids = select(Digest.id).where(
+        Digest.user_id == user_id, Digest.digest_date == digest_date
+    )
+    item_ids = select(DigestItem.content_item_id).where(DigestItem.digest_id.in_(existing_ids))
+    await db.execute(
+        update(ContentItem)
+        .where(ContentItem.id.in_(item_ids))
+        .values(status=ContentStatus.processed.value)
+    )
+    await db.execute(delete(DigestItem).where(DigestItem.digest_id.in_(existing_ids)))
     await db.execute(
         delete(Digest).where(Digest.user_id == user_id, Digest.digest_date == digest_date)
     )
@@ -80,6 +93,7 @@ async def load_digest_items(
         select(DigestItem, ContentItem, AIAnalysis)
         .join(ContentItem, ContentItem.id == DigestItem.content_item_id)
         .join(AIAnalysis, AIAnalysis.content_item_id == ContentItem.id)
+        .options(joinedload(ContentItem.source))
         .where(DigestItem.digest_id == digest_id)
         .order_by(DigestItem.position)
     )

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from core.database import get_db
 from models import ContentItem, Feedback
@@ -37,6 +38,7 @@ async def saved_items(db: AsyncSession = Depends(get_db)) -> list[SavedItemOut]:
     result = await db.execute(
         select(Feedback, ContentItem)
         .join(ContentItem, ContentItem.id == Feedback.content_item_id)
+        .options(joinedload(ContentItem.source))
         .where(Feedback.user_id == user.id, Feedback.feedback_type == FeedbackType.save.value)
         .order_by(Feedback.created_at.desc())
     )
